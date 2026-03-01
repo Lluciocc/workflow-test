@@ -1,7 +1,7 @@
 name: PR Review State Automation
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - review_requested
   pull_request_review:
@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   manage-pr-labels:
@@ -21,50 +23,50 @@ jobs:
         with:
           github-token: ${{ secrets.BOT_TOKEN }}
           script: |
-            const pr = context.payload.pull_request;
+            const prNumber = context.issue.number;
             const eventName = context.eventName;
 
             async function getLabels() {
               const { data } = await github.rest.issues.listLabelsOnIssue({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: pr.number
+                issue_number: prNumber
               });
               return data.map(l => l.name);
             }
 
-            async function removeLabel(name) {
-              const labels = await getLabels();
-              if (labels.includes(name)) {
+            async function removeLabel(name, existingLabels) {
+              if (existingLabels.includes(name)) {
                 await github.rest.issues.removeLabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  issue_number: pr.number,
+                  issue_number: prNumber,
                   name: name
                 });
               }
             }
 
-            async function addLabel(name) {
-              const labels = await getLabels();
-              if (!labels.includes(name)) {
+            async function addLabel(name, existingLabels) {
+              if (!existingLabels.includes(name)) {
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  issue_number: pr.number,
+                  issue_number: prNumber,
                   labels: [name]
                 });
               }
             }
 
-            if (eventName === "pull_request_target" &&
+            const labels = await getLabels();
+
+            if (eventName === "pull_request" &&
                 context.payload.action === "review_requested") {
 
-              await removeLabel("waiting for changes");
-              await addLabel("waiting for review");
+              await removeLabel("waiting for changes", labels);
+              await removeLabel("ready", labels);
+              await addLabel("waiting for review", labels);
               return;
             }
-
 
             if (eventName === "pull_request_review" &&
                 context.payload.action === "submitted") {
@@ -72,14 +74,14 @@ jobs:
               const reviewState = context.payload.review.state;
 
               if (reviewState === "changes_requested") {
-                await removeLabel("waiting for review");
-                await removeLabel("ready");
-                await addLabel("waiting for changes");
+                await removeLabel("waiting for review", labels);
+                await removeLabel("ready", labels);
+                await addLabel("waiting for changes", labels);
               }
 
               if (reviewState === "approved") {
-                await removeLabel("waiting for review");
-                await removeLabel("waiting for changes");
-                await addLabel("ready");
+                await removeLabel("waiting for review", labels);
+                await removeLabel("waiting for changes", labels);
+                await addLabel("ready", labels);
               }
             }
