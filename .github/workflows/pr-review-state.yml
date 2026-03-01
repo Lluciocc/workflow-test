@@ -1,7 +1,7 @@
 name: PR Review State Automation
 
 on:
-  pull_request:
+  pull_request_target:
     types:
       - review_requested
   pull_request_review:
@@ -24,9 +24,17 @@ jobs:
             const pr = context.payload.pull_request;
             const eventName = context.eventName;
 
-            const labels = pr.labels.map(label => label.name);
+            async function getLabels() {
+              const { data } = await github.rest.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number
+              });
+              return data.map(l => l.name);
+            }
 
             async function removeLabel(name) {
+              const labels = await getLabels();
               if (labels.includes(name)) {
                 await github.rest.issues.removeLabel({
                   owner: context.repo.owner,
@@ -38,6 +46,7 @@ jobs:
             }
 
             async function addLabel(name) {
+              const labels = await getLabels();
               if (!labels.includes(name)) {
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -48,14 +57,11 @@ jobs:
               }
             }
 
-            if (eventName === "pull_request" &&
+            if (eventName === "pull_request_target" &&
                 context.payload.action === "review_requested") {
 
-              if (labels.includes("waiting for changes")) {
-                await removeLabel("waiting for changes");
-                await addLabel("waiting for review");
-              }
-
+              await removeLabel("waiting for changes");
+              await addLabel("waiting for review");
               return;
             }
 
