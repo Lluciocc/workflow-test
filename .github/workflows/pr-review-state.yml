@@ -21,7 +21,7 @@ jobs:
       - name: Manage PR state labels
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.BOT_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prNumber = context.issue.number;
             const eventName = context.eventName;
@@ -35,19 +35,19 @@ jobs:
               return data.map(l => l.name);
             }
 
-            async function removeLabel(name, existingLabels) {
-              if (existingLabels.includes(name)) {
+            async function removeLabel(name, existing) {
+              if (existing.includes(name)) {
                 await github.rest.issues.removeLabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: prNumber,
-                  name: name
+                  name
                 });
               }
             }
 
-            async function addLabel(name, existingLabels) {
-              if (!existingLabels.includes(name)) {
+            async function addLabel(name, existing) {
+              if (!existing.includes(name)) {
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -59,7 +59,7 @@ jobs:
 
             const labels = await getLabels();
 
-            if (eventName === "pull_request" &&
+            if (eventName === "pull_request_target" &&
                 context.payload.action === "review_requested") {
 
               await removeLabel("waiting for changes", labels);
